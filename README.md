@@ -57,7 +57,34 @@ src/
 
 ## 部署
 
-静态产物，可托管在任意静态服务（GitHub Pages / Cloudflare Pages / Vercel / Netlify）。
+静态产物，可托管在任意静态服务。**国内用户请优先看下面的方案对比。**
+
+### 速度对比（国内用户）
+
+| 方案 | 免备案 | 国内访问 | 上线耗时 |
+|---|---|---|---|
+| **Cloudflare Pages**（`*.pages.dev`） | ✅ | 可访问（[GreatFire 实测](https://zh.greatfire.org/https/pages.dev)：近 90 天 0% 干扰） | **约 3 分钟** |
+| EdgeOne Pages（默认域名） | ✅ | 不含大陆加速 | 约 10 分钟 |
+| EdgeOne / 阿里云 OSS + 自有域名（含大陆加速） | ❌ **必须先 ICP 备案** | 最快 | 1–3 周 |
+| GitHub Pages（`*.github.io`） | ✅ | ❌ 不稳定，[已有用户报告突然无法访问](https://www.v2ex.com/t/1239025) | 已部署 |
+
+**硬规则：国内快 ＝ 必须 ICP 备案。** 免备案与国内极速不可兼得。
+
+### Cloudflare Pages（最快上线）
+
+1. 登录 Cloudflare → Workers & Pages → Create → Pages → Connect to Git
+2. 选择本仓库，构建配置：
+
+   | 项 | 值 |
+   |---|---|
+   | Framework preset | Vite（或 None） |
+   | Build command | `npm run build` |
+   | Build output directory | `dist` |
+
+3. Save and Deploy → 约 1 分钟拿到 `xxx.pages.dev`
+
+> 仓库**故意不提交 `bun.lock`**：本地 lockfile 指向内网 npm 镜像，
+> 提交后 Cloudflare 无法拉包会直接构建失败。CI 用 npm 从公共源安装。
 
 ### 本机 git push 被拦截的绕行方式
 
