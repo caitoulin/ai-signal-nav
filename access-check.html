@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>连通性粗测 · AI 信号台</title>
+<style>
+  :root{--bg:#f7f8fa;--card:#fff;--ink:#151a21;--ink2:#5a6673;--line:#e5e8ec;
+        --ok:#16a34a;--bad:#dc2626;--wait:#ca8a04;--brand:#2563eb}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:900px;margin:0 auto;padding:24px 16px 60px}
+  h1{font-size:20px;margin:0 0 6px}
+  p.lead{color:var(--ink2);margin:0 0 18px}
+  .bar{position:sticky;top:0;background:var(--bg);padding:12px 0;border-bottom:1px solid var(--line);
+       display:flex;gap:10px;align-items:center;flex-wrap:wrap;z-index:5}
+  button{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 14px;
+         font:inherit;cursor:pointer}
+  button:hover{border-color:var(--brand);color:var(--brand)}
+  button.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .stat{color:var(--ink2);font-size:13px}
+  table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--ink2);font-weight:500;position:sticky;top:57px;background:var(--bg)}
+  .s-ok{color:var(--ok);font-weight:600}
+  .s-bad{color:var(--bad);font-weight:600}
+  .s-wait{color:var(--wait)}
+  code{background:#eef1f4;padding:1px 5px;border-radius:4px;font-size:12px}
+  textarea{width:100%;height:130px;margin-top:12px;font:12px/1.5 ui-monospace,monospace;
+           border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--card);color:var(--ink)}
+  .hint{color:var(--ink2);font-size:12.5px;margin-top:8px}
+  tr.bad-row{background:#fff5f5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>连通性粗测（不是可用性判定）</h1>
+  <p class="lead">
+    共 <b>149</b> 个站点。本页在你<b>当前的网络</b>下探测，测的是<b>网络层能不能通</b>。
+    完成后点「复制结果」把文本发我。
+  </p>
+  <p class="lead" style="background:#fff8e6;border:1px solid #f0d9a0;border-radius:8px;padding:10px 12px">
+    <b>这个测试测不出什么：</b>站点返回「地区不支持」的拦截页、或返回错误码，都会被算作「通」。
+    所以 <span class="s-ok">通</span> 只代表网络可达，<b>不代表能用</b>；
+    只有 <span class="s-bad">疑似被拦</span> 是可靠信号。
+  </p>
+
+  <div class="bar">
+    <button class="primary" id="run">开始体检</button>
+    <button id="copy" disabled>复制结果</button>
+    <span class="stat" id="stat">待开始</span>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:44%">站点</th><th style="width:26%">域名</th><th>结果</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <p class="hint">
+    说明：探测方式是加载各站点的图标（favicon）。<code>不可达</code> 大概率是网络层被拦或超时；
+    少数站点因未设图标会误报为不可达——可对可疑项手动打开确认。
+  </p>
+
+  <textarea id="out" readonly placeholder="体检完成后，结果会出现在这里"></textarea>
+</div>
+
+<script>
+const SITES = [{"name":"Codex 重置追踪","url":"https://codex-reset.com/zh/","cat":"signal"},{"name":"Codex 雷达","url":"https://codex-reset.com/zh/radar","cat":"signal"},{"name":"AI 服务重置监控","url":"https://www.aitrend.us/codex-reset","cat":"signal"},{"name":"AI 热点榜","url":"https://aihot.news/hot","cat":"signal"},{"name":"AI 日报","url":"https://aihot.news/daily","cat":"signal"},{"name":"OpenAI 状态页","url":"https://status.openai.com","cat":"signal"},{"name":"Anthropic 状态页","url":"https://status.anthropic.com","cat":"signal"},{"name":"Google Cloud 状态","url":"https://status.cloud.google.com","cat":"signal"},{"name":"OpenRouter 排行","url":"https://openrouter.ai/rankings","cat":"signal"},{"name":"HuggingFace 趋势","url":"https://huggingface.co/models","cat":"signal"},{"name":"HuggingFace 论文","url":"https://huggingface.co/papers","cat":"signal"},{"name":"GitHub Trending","url":"https://github.com/trending","cat":"signal"},{"name":"free-for.dev","url":"https://github.com/ripienaar/free-for-dev","cat":"free"},{"name":"Langfuse","url":"https://langfuse.com","cat":"free"},{"name":"Keywords AI","url":"https://keywordsai.co","cat":"free"},{"name":"Portkey","url":"https://portkey.ai","cat":"free"},{"name":"Braintrust","url":"https://www.braintrustdata.com","cat":"free"},{"name":"Arize AX","url":"https://arize.com","cat":"free"},{"name":"Latitude","url":"https://latitude.so","cat":"free"},{"name":"LangWatch","url":"https://langwatch.ai","cat":"free"},{"name":"Maxim","url":"https://www.getmaxim.ai","cat":"free"},{"name":"telemetry.dev","url":"https://telemetry.dev","cat":"free"},{"name":"Future AGI","url":"https://futureagi.com","cat":"free"},{"name":"Gonka Broker","url":"https://gonkabroker.com","cat":"free"},{"name":"OpenRouter 免费模型","url":"https://openrouter.ai/models?q=free","cat":"free"},{"name":"Pollinations.AI","url":"https://pollinations.ai","cat":"free"},{"name":"Firecrawl","url":"https://www.firecrawl.dev","cat":"free"},{"name":"Comet Opik","url":"https://www.comet.com/site/products/opik/","cat":"free"},{"name":"Kaggle","url":"https://www.kaggle.com","cat":"free"},{"name":"Google Colab","url":"https://colab.research.google.com","cat":"free"},{"name":"Qdrant","url":"https://qdrant.tech","cat":"free"},{"name":"Turso","url":"https://turso.tech","cat":"free"},{"name":"Upstash","url":"https://upstash.com","cat":"free"},{"name":"Neo4j Aura","url":"https://neo4j.com/cloud/aura/","cat":"free"},{"name":"Composio","url":"https://composio.dev","cat":"free"},{"name":"Zenable","url":"https://zenable.io","cat":"free"},{"name":"ChatGPT","url":"https://chatgpt.com","cat":"chat"},{"name":"Claude","url":"https://claude.ai","cat":"chat"},{"name":"Gemini","url":"https://gemini.google.com","cat":"chat"},{"name":"Grok","url":"https://grok.com","cat":"chat"},{"name":"Perplexity","url":"https://www.perplexity.ai","cat":"chat"},{"name":"Mistral","url":"https://mistral.ai","cat":"chat"},{"name":"Meta AI","url":"https://www.meta.ai","cat":"chat"},{"name":"Microsoft Copilot","url":"https://copilot.microsoft.com","cat":"chat"},{"name":"Claude Code","url":"https://claude.com/product/claude-code","cat":"code"},{"name":"Codex","url":"https://openai.com/codex","cat":"code"},{"name":"Cursor","url":"https://cursor.com","cat":"code"},{"name":"GitHub Copilot","url":"https://github.com/features/copilot","cat":"code"},{"name":"Cline","url":"https://cline.bot","cat":"code"},{"name":"Windsurf","url":"https://windsurf.com","cat":"code"},{"name":"opencode","url":"https://opencode.ai","cat":"code"},{"name":"Aider","url":"https://aider.chat","cat":"code"},{"name":"Devin","url":"https://devin.ai","cat":"code"},{"name":"v0","url":"https://v0.dev","cat":"code"},{"name":"Bolt","url":"https://bolt.new","cat":"code"},{"name":"Lovable","url":"https://lovable.dev","cat":"code"},{"name":"Replit","url":"https://replit.com","cat":"code"},{"name":"Midjourney","url":"https://midjourney.com","cat":"image"},{"name":"Ideogram","url":"https://ideogram.ai","cat":"image"},{"name":"Krea","url":"https://www.krea.ai","cat":"image"},{"name":"Recraft","url":"https://recraft.ai","cat":"image"},{"name":"Civitai","url":"https://civitai.com","cat":"image"},{"name":"即梦","url":"https://jimeng.jianying.com","cat":"image"},{"name":"Unlimited OCR","url":"https://github.com/baidu/Unlimited-OCR","cat":"image"},{"name":"Sora","url":"https://sora.chatgpt.com","cat":"video"},{"name":"Runway","url":"https://runwayml.com","cat":"video"},{"name":"可灵 Kling","url":"https://klingai.com","cat":"video"},{"name":"Vidu","url":"https://www.viduglobal.com","cat":"video"},{"name":"Luma","url":"https://lumalabs.ai","cat":"video"},{"name":"HeyGen","url":"https://heygen.com","cat":"video"},{"name":"Hailuo 海螺","url":"https://www.hailuo.ai","cat":"video"},{"name":"fal","url":"https://fal.ai","cat":"video"},{"name":"beeble","url":"https://beeble.ai","cat":"video"},{"name":"Suno","url":"https://suno.com","cat":"audio"},{"name":"ElevenLabs","url":"https://elevenlabs.io","cat":"audio"},{"name":"Fish Audio","url":"https://fish.audio","cat":"audio"},{"name":"OpenAI Agents API","url":"https://developers.openai.com/api/docs/guides/agents-api/overview","cat":"agent"},{"name":"Model Context Protocol","url":"https://modelcontextprotocol.io","cat":"agent"},{"name":"Dify","url":"https://dify.ai","cat":"agent"},{"name":"n8n","url":"https://n8n.io","cat":"agent"},{"name":"n8n 工作流库","url":"https://n8n.io/workflows","cat":"agent"},{"name":"LangChain","url":"https://langchain.com","cat":"agent"},{"name":"LangGraph","url":"https://langgraph.com","cat":"agent"},{"name":"CrewAI","url":"https://www.crewai.com","cat":"agent"},{"name":"AutoGen","url":"https://microsoft.github.io/autogen","cat":"agent"},{"name":"E2B","url":"https://e2b.dev","cat":"agent"},{"name":"Daytona","url":"https://www.daytona.io","cat":"agent"},{"name":"MCP 服务器目录","url":"https://mcp.so","cat":"agent"},{"name":"Smithery","url":"https://smithery.ai","cat":"agent"},{"name":"NotebookLM","url":"https://notebooklm.google.com","cat":"research"},{"name":"Elicit","url":"https://elicit.com","cat":"research"},{"name":"Consensus","url":"https://consensus.app","cat":"research"},{"name":"SciSpace","url":"https://scispace.com","cat":"research"},{"name":"arXiv","url":"https://arxiv.org","cat":"paper"},{"name":"Semantic Scholar","url":"https://www.semanticscholar.org","cat":"paper"},{"name":"OpenReview","url":"https://openreview.net","cat":"paper"},{"name":"Connected Papers","url":"https://www.connectedpapers.com","cat":"paper"},{"name":"alphaXiv","url":"https://www.alphaxiv.org","cat":"paper"},{"name":"LMArena","url":"https://lmarena.ai","cat":"rank"},{"name":"Artificial Analysis","url":"https://artificialanalysis.ai","cat":"rank"},{"name":"SWE-bench","url":"https://www.swebench.com","cat":"rank"},{"name":"METR 时间视界","url":"https://metr.org/time-horizons/","cat":"rank"},{"name":"LiveBench","url":"https://livebench.ai","cat":"rank"},{"name":"Aider 排行","url":"https://aider.chat/docs/leaderboards","cat":"rank"},{"name":"机器之心","url":"https://www.jiqizhixin.com","cat":"news"},{"name":"量子位","url":"https://www.qbitai.com","cat":"news"},{"name":"OpenAI News","url":"https://openai.com/news","cat":"news"},{"name":"Anthropic News","url":"https://www.anthropic.com/news","cat":"news"},{"name":"Anthropic Engineering","url":"https://www.anthropic.com/engineering","cat":"news"},{"name":"Google DeepMind Blog","url":"https://deepmind.google/discover/blog","cat":"news"},{"name":"Hacker News","url":"https://news.ycombinator.com","cat":"news"},{"name":"Simon Willison","url":"https://simonwillison.net","cat":"news"},{"name":"Latent Space","url":"https://www.latent.space","cat":"news"},{"name":"TLDR AI","url":"https://tldr.tech/ai","cat":"news"},{"name":"Ben's Bites","url":"https://www.bensbites.com","cat":"news"},{"name":"HuggingFace","url":"https://huggingface.co","cat":"tool"},{"name":"HuggingFace Spaces","url":"https://huggingface.co/spaces","cat":"tool"},{"name":"OpenRouter","url":"https://openrouter.ai","cat":"tool"},{"name":"Replicate","url":"https://replicate.com","cat":"tool"},{"name":"Groq","url":"https://groq.com","cat":"tool"},{"name":"Ollama","url":"https://ollama.com","cat":"tool"},{"name":"LM Studio","url":"https://lmstudio.ai","cat":"tool"},{"name":"Jan","url":"https://jan.ai","cat":"tool"},{"name":"Cursor Directory","url":"https://cursor.directory","cat":"tool"},{"name":"DigitalPlat","url":"https://domain.digitalplat.org","cat":"tool"},{"name":"DNSHE","url":"https://www.dnshe.com","cat":"tool"},{"name":"pp.ua","url":"https://nic.ua","cat":"tool"},{"name":"isroot.in","url":"https://isroot.in","cat":"tool"},{"name":"deSEC","url":"https://desec.io","cat":"tool"},{"name":"ClouDNS","url":"https://www.cloudns.net","cat":"tool"},{"name":"DeepSeek","url":"https://chat.deepseek.com","cat":"local"},{"name":"通义千问 Qwen","url":"https://chat.qwen.ai","cat":"local"},{"name":"Kimi","url":"https://www.kimi.com","cat":"local"},{"name":"智谱 ChatGLM","url":"https://chatglm.cn","cat":"local"},{"name":"Z.ai","url":"https://chat.z.ai","cat":"local"},{"name":"豆包","url":"https://www.doubao.com","cat":"local"},{"name":"腾讯元宝","url":"https://yuanbao.tencent.com","cat":"local"},{"name":"MiniMax","url":"https://www.minimaxi.com","cat":"local"},{"name":"ModelScope 魔搭","url":"https://www.modelscope.cn","cat":"local"},{"name":"硅基流动","url":"https://siliconflow.cn","cat":"local"},{"name":"扣子 Coze","url":"https://www.coze.cn","cat":"local"},{"name":"知乎","url":"https://www.zhihu.com","cat":"local"},{"name":"AIHOT","url":"https://aihot.news/all","cat":"nav"},{"name":"365AI 导航","url":"https://365dh.cn","cat":"nav"},{"name":"AI 导航台","url":"https://nav-ai.cn","cat":"nav"},{"name":"AI 聚途","url":"https://aijutu.com","cat":"nav"},{"name":"ZhiNav","url":"https://zhinav.com","cat":"nav"},{"name":"AI 全站导航","url":"https://ainall.cc","cat":"nav"},{"name":"AI Stack Nav","url":"https://aistacknav.com","cat":"nav"}];
+const rows = document.getElementById("rows");
+const stat = document.getElementById("stat");
+const out = document.getElementById("out");
+const copyBtn = document.getElementById("copy");
+let results = {};
+
+function hostOf(u){ return u.replace(/^https?:\/\//,"").split("/")[0]; }
+
+// 探针一：fetch(no-cors) —— 能到达网络层就 resolve，硬失败才是 reject
+async function probeFetch(url, timeoutMs = 8000){
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), timeoutMs);
+    await fetch(url, { mode: "no-cors", signal: ctrl.signal, redirect: "follow" });
+    clearTimeout(to);
+    return "ok";
+  } catch (e) {
+    return e.name === "AbortError" ? "timeout" : "blocked";
+  }
+}
+
+// 探针二：本站 /favicon.ico —— 不依赖任何第三方（Google favicon 在国内被墙）
+function probeIcon(url, timeoutMs = 8000){
+  return new Promise(resolve => {
+    const img = new Image();
+    let done = false;
+    const t = setTimeout(() => { if(!done){ done = true; img.src=""; resolve("timeout"); } }, timeoutMs);
+    img.onload  = () => { if(!done){ done = true; clearTimeout(t); resolve("ok"); } };
+    img.onerror = () => { if(!done){ done = true; clearTimeout(t); resolve("bad"); } };
+    img.src = url.replace(/\/+$/,"") + "/favicon.ico";
+  });
+}
+
+// 两者都失败才算「疑似不可达」；只要有一个通过就算可达 —— 减少误报
+async function probeBoth(url){
+  const a = await probeFetch(url);
+  if (a === "ok") return "ok";
+  const b = await probeIcon(url);
+  if (b === "ok") return "ok";
+  return a === "timeout" || b === "timeout" ? "timeout" : "blocked";
+}
+
+rows.innerHTML = SITES.map((s,i) => `<tr id="r${i}">
+  <td>${s.name}</td><td><code>${hostOf(s.url)}</code></td><td class="cell">待测</td></tr>`).join("");
+
+document.getElementById("run").onclick = async () => {
+  const btn = document.getElementById("run");
+  btn.disabled = true;
+  results = {};
+  let ok=0, bad=0, to=0;
+
+  for (let i=0; i<SITES.length; i++){
+    const s = SITES[i];
+    const cell = document.querySelector(`#r${i} .cell`);
+    cell.textContent = "…"; cell.className = "cell s-wait";
+
+    let r = await probeBoth(s.url);
+
+    results[s.name] = { url: s.url, cat: s.cat, r };
+    if (r === "ok"){ ok++; cell.textContent="通"; cell.className="cell s-ok"; }
+    else if (r === "blocked"){ bad++; cell.textContent="疑似被拦"; cell.className="cell s-bad";
+      document.getElementById("r"+i).classList.add("bad-row"); }
+    else { to++; cell.textContent="超时"; cell.className="cell s-wait";
+      document.getElementById("r"+i).classList.add("bad-row"); }
+
+    stat.textContent = `进度 ${i+1}/${SITES.length}　通 ${ok}　疑似被拦 ${bad}　超时 ${to}`;
+  }
+
+  btn.disabled = false;
+  copyBtn.disabled = false;
+  const badList = Object.entries(results).filter(([,v]) => v.r!=="ok")
+    .map(([k,v]) => `${k}\t${v.url}\t${v.r==="timeout"?"超时":"疑似被拦"}`).join("\n");
+  out.value =
+    `连通性粗测结果（只判硬失败，不代表可用性）\n生成时间：${new Date().toLocaleString()}\n` +
+    `总计 ${SITES.length}　通 ${ok}　疑似被拦 ${bad}　超时 ${to}\n\n` +
+    `【疑似被拦 / 超时清单】\n${badList || "（无）"}\n`;
+};
+
+copyBtn.onclick = () => {
+  out.select();
+  navigator.clipboard.writeText(out.value).then(
+    () => { copyBtn.textContent = "已复制 ✓"; setTimeout(()=>copyBtn.textContent="复制结果", 1500); },
+    () => { copyBtn.textContent = "请手动复制"; }
+  );
+};
+</script>
+</body>
+</html>
