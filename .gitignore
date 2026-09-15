@@ -4,3 +4,7 @@ dist/
 .DS_Store
 .vite/
 *.local
+
+# 本地 lockfile 指向内网 npm 镜像（registry.anpm.alibaba-inc.com），
+# 提交会导致 CI（Cloudflare Pages / GitHub Actions）拉包失败，故不入库。
+bun.lock
